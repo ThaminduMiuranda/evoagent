@@ -36,8 +36,10 @@
 [1mlangchain-community[0m==0.0.28
 [1mlangchain-core[0m==0.1.32
 [1mlangsmith[0m==0.1.147
+[1mmarkdown-it-py[0m==3.0.0
 [1mmarshmallow[0m==3.26.2
 [1mmatplotlib[0m==3.8.3
+[1mmdurl[0m==0.1.2
 [1mmultidict[0m==6.7.1
 [1mmypy-extensions[0m==1.1.0
 [1mnumpy[0m==1.26.4
@@ -53,11 +55,13 @@
 [1mpycparser[0m==2.23
 [1mpydantic[0m==2.13.5
 [1mpydantic-core[0m==2.46.5
+[1mpygments[0m==2.21.0
 [1mpyparsing[0m==3.3.3
 [1mpython-dateutil[0m==2.9.0.post0
 [1mpyyaml[0m==6.0.3
 [1mrequests[0m==2.32.5
 [1mrequests-toolbelt[0m==1.0.0
+[1mrich[0m==15.0.0
 [1msix[0m==1.17.0
 [1msqlalchemy[0m==2.0.54
 [1mtenacity[0m==8.2.3

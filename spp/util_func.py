@@ -285,6 +285,9 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
                     "completion_tokens_total": completion_tokens_total,
                     "completion_tokens_est_content": completion_tokens_est_content,
                     "completion_tokens_est_thinking": completion_tokens_est_thinking,
+                    "messages": messages,
+                    "content": clean_result,
+                    "thinking": thinking_text,
                     "done_reason": done_reason,
                     "content_empty": clean_result.strip() == "",
                 }

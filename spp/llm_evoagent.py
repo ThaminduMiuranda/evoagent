@@ -42,6 +42,12 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--end", type=int, default=31)
     parser.add_argument("--ind", type=int, default=3)
+    parser.add_argument("--run_tag", type=str, default="",
+                         help="Suffix appended to the progress/result filenames, so arms "
+                              "sharing the same model_name+method (e.g. direct w/ and w/o "
+                              "thinking) don't collide on the same progress file.")
+    parser.add_argument("--limit", type=int, default=None,
+                         help="Only process the first N instances (for smoke tests).")
     args = parser.parse_args()
     model_name = args.model_name
     data_type = args.data_type
@@ -51,13 +57,16 @@ if __name__ == "__main__":
         test_data = read_jsonline('data/trivia_creative_writing/trivia_creative_writing_100_n_5.jsonl')
     elif task_name == 'logic':
         test_data = read_jsonline('data/logic_grid_puzzle/logic_grid_puzzle_200.jsonl')
+    if args.limit is not None:
+        test_data = test_data[:args.limit]
 
     total_files = len(test_data)
-    progress_file = f"{task_name}_{model_name}_{method}.txt"
+    progress_file = f"{task_name}_{model_name}_{method}{args.run_tag}.txt"
     start_index = get_last_processed_index(progress_file)
     azure = False
     with tqdm(total=total_files, desc="Processing files", initial=start_index) as pbar:
         for i, data in enumerate(test_data[start_index:], start=start_index):
+            os.environ["INSTANCE_IDX"] = str(i)
 
             if task_name == 'writing':
                 topic = data["topic"]
@@ -107,7 +116,7 @@ if __name__ == "__main__":
                         break
                 data["final_score"] = score
 
-            with open(progress_file.split('.')[0] + '.jsonl', 'a+', encoding='utf-8') as f:
+            with open(os.path.splitext(progress_file)[0] + '.jsonl', 'a+', encoding='utf-8') as f:
                 line = json.dumps(data, ensure_ascii=False)
                 f.write(line + '\n')
 

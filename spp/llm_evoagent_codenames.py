@@ -197,18 +197,27 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--end", type=int, default=31)
     parser.add_argument("--ind", type=int, default=3)
+    parser.add_argument("--run_tag", type=str, default="",
+                         help="Suffix appended to the progress/result filenames, so arms "
+                              "sharing the same model_name+method (e.g. direct w/ and w/o "
+                              "thinking) don't collide on the same progress file.")
+    parser.add_argument("--limit", type=int, default=None,
+                         help="Only process the first N instances (for smoke tests).")
     args = parser.parse_args()
     model_name = args.model_name
     data_type = args.data_type
     method = args.method
     test_data = read_jsonline('data/codenames_collaborative/codenames_50.jsonl')
+    if args.limit is not None:
+        test_data = test_data[:args.limit]
 
     total_files = len(test_data)
-    progress_file = f"result/codenames_collaborative_{model_name}_{method}.txt"
+    progress_file = f"result/codenames_collaborative_{model_name}_{method}{args.run_tag}.txt"
     start_index = get_last_processed_index(progress_file)
     azure = False
     with tqdm(total=total_files, desc="Processing files", initial=start_index) as pbar:
         for i, data in enumerate(test_data[start_index:], start=start_index):
+            os.environ["INSTANCE_IDX"] = str(i)
             # For spymaster
             word_list = data["word_list"]
             target_words = data["target_words"]
@@ -287,7 +296,7 @@ Answer:
             data["info"] = {"matched_words": common_words, "matched_count": len(common_words),
                             "target_count": len(target_words_set)}
 
-            with open(progress_file.split('.')[0] + '.jsonl', 'a+', encoding='utf-8') as f:
+            with open(os.path.splitext(progress_file)[0] + '.jsonl', 'a+', encoding='utf-8') as f:
                 line = json.dumps(data, ensure_ascii=False)
                 f.write(line + '\n')
 

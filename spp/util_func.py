@@ -21,6 +21,8 @@ from langchain.memory import ConversationBufferMemory
 from langchain import LLMChain
 import os
 import openai
+import requests
+import time
 
 safety_settings = [
     {
@@ -218,18 +220,78 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
                     stop=None)
                 clean_result = result["choices"][0]["message"]["content"]
             elif data_type == 'small':
-                openai.api_key = "EMPTY"
-                openai.api_base = "http://localhost:8701/v1"
-                models = openai.Model.list()
-                model_name = models["data"][0]["id"]
-                result = openai.ChatCompletion.create(
-                    model=model_name,
-                    messages=messages,
-                    temperature=0,
-                    max_tokens=512,
-                    stop=None)
+                # Local model via Ollama's native API (http://localhost:11434/api/chat).
+                # Native API is used instead of the OpenAI-compat endpoint because the
+                # compat layer silently ignores "options" (num_ctx/num_gpu) and "think"
+                # is unreliable there; both are confirmed to work via /api/chat.
+                ollama_base = os.environ.get("OLLAMA_BASE", "http://localhost:11434")
+                think = os.environ.get("OLLAMA_THINK", "false").strip().lower() == "true"
+                num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
+                num_gpu = int(os.environ.get("OLLAMA_NUM_GPU", "999"))
+                max_tokens = int(os.environ.get("OLLAMA_MAX_TOKENS", "512"))
+                temperature = float(os.environ.get("OLLAMA_TEMPERATURE", "0"))
 
-                clean_result = result["choices"][0]["message"]["content"]
+                call_start = time.time()
+                resp = requests.post(
+                    f"{ollama_base}/api/chat",
+                    json={
+                        "model": model_name,
+                        "messages": messages,
+                        "think": think,
+                        "options": {
+                            "num_ctx": num_ctx,
+                            "num_gpu": num_gpu,
+                            "temperature": temperature,
+                            "num_predict": max_tokens,
+                        },
+                        "stream": False,
+                    },
+                    timeout=600,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                call_wall_time = time.time() - call_start
+
+                clean_result = result.get("message", {}).get("content", "")
+                thinking_text = result.get("message", {}).get("thinking", "") or ""
+                done_reason = result.get("done_reason")
+                prompt_tokens = result.get("prompt_eval_count")
+                completion_tokens_total = result.get("eval_count")
+
+                # Ollama's native API does not split eval_count between thinking and
+                # content tokens. We approximate the split by character-length ratio
+                # and label it clearly as an estimate (no exact per-field count exists).
+                content_chars = len(clean_result)
+                thinking_chars = len(thinking_text)
+                total_chars = content_chars + thinking_chars
+                if completion_tokens_total and total_chars > 0:
+                    completion_tokens_est_content = round(completion_tokens_total * content_chars / total_chars)
+                    completion_tokens_est_thinking = completion_tokens_total - completion_tokens_est_content
+                else:
+                    completion_tokens_est_content = completion_tokens_total
+                    completion_tokens_est_thinking = 0
+
+                log_record = {
+                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                    "arm": os.environ.get("ARM"),
+                    "task": os.environ.get("task"),
+                    "instance_idx": os.environ.get("INSTANCE_IDX"),
+                    "model": model_name,
+                    "think": think,
+                    "num_ctx": num_ctx,
+                    "max_tokens": max_tokens,
+                    "wall_time_sec": round(call_wall_time, 4),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens_total": completion_tokens_total,
+                    "completion_tokens_est_content": completion_tokens_est_content,
+                    "completion_tokens_est_thinking": completion_tokens_est_thinking,
+                    "done_reason": done_reason,
+                    "content_empty": clean_result.strip() == "",
+                }
+                log_path = os.environ.get("LOG_PATH", "logs/calls.jsonl")
+                os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+                with open(log_path, "a", encoding="utf-8") as lf:
+                    lf.write(json.dumps(log_record, ensure_ascii=False) + "\n")
             print(clean_result)
             return clean_result
         except Exception as e:

@@ -36,6 +36,17 @@ import traceback
 from agent_prompt_code import *
 
 
+def extract_final_answer(answer):
+    """Returns the text after 'Final Answer:', or None if the model never wrote it.
+    Callers must treat None as a parse failure, not fall back to the raw answer --
+    the raw text (meta-reasoning) can contain every target word, which would leak
+    the answer into a downstream prompt instead of scoring as a miss.
+    """
+    if "Final Answer:" not in answer:
+        return None
+    return answer.split("Final Answer:")[-1].strip()
+
+
 def message_construction(prompt, model_name):
     if model_name != 'gemini':
         messages = [
@@ -245,10 +256,28 @@ Answer:
                 clean_result = evaluator_construction(messages, model_name, prompt, data_type)
                 answer = clean_result
                 answer_list = []
-            hint_word = answer.split("Final Answer:")[-1].strip()
+            spy_parsed = extract_final_answer(answer)
+            spy_parse_failed = spy_parsed is None
+            hint_word = spy_parsed if spy_parsed is not None else ""
             data["spy_answer"] = answer
             data["spy_answer_list"] = answer_list
             data["hint_word"] = hint_word
+            data["spy_parse_failed"] = spy_parse_failed
+
+            if spy_parse_failed:
+                # No parseable hint to give the guesser. Score 0 and move on --
+                # do NOT pass the raw reasoning on as the hint, since it can
+                # (and in testing, reliably does) contain every target word.
+                data["guess_answer"] = None
+                data["guess_list"] = []
+                data["info"] = {"matched_words": [], "matched_count": 0,
+                                "target_count": len(set(w.strip().lower() for w in data["target_words"])),
+                                "guess_parse_failed": None}
+                with open(os.path.splitext(progress_file)[0] + '.jsonl', 'a+', encoding='utf-8') as f:
+                    f.write(json.dumps(data, ensure_ascii=False) + '\n')
+                update_progress(progress_file, i + 1)
+                pbar.update(1)
+                continue
 
             # For guesser
             word_list = data["word_list"]
@@ -280,21 +309,24 @@ Answer:
 
             target_words = data['target_words']
             target_words = [word.strip().lower() for word in target_words]
-
-            predicted_words = answer.split("Final Answer:")[-1].split(",")
-            predicted_words = [word.strip().replace(".", "").lower() for word in predicted_words]
-
-            # ground truth set
             target_words_set = set(target_words)
-            # predicted set
-            predicted_words_set = set(predicted_words)
 
-            common_words = predicted_words_set.intersection(target_words_set)
-            common_words = list(common_words)
+            guess_parsed = extract_final_answer(answer)
+            guess_parse_failed = guess_parsed is None
+            if guess_parse_failed:
+                # No parseable guess list -- score 0 rather than matching
+                # against raw reasoning text (same leak risk as the spy side).
+                predicted_words_set = set()
+            else:
+                predicted_words = [w.strip().replace(".", "").lower() for w in guess_parsed.split(",")]
+                predicted_words_set = set(predicted_words)
+
+            common_words = list(predicted_words_set.intersection(target_words_set))
             data["guess_answer"] = answer
             data["guess_list"] = answer_list
+            data["guess_parse_failed"] = guess_parse_failed
             data["info"] = {"matched_words": common_words, "matched_count": len(common_words),
-                            "target_count": len(target_words_set)}
+                            "target_count": len(target_words_set), "guess_parse_failed": guess_parse_failed}
 
             with open(os.path.splitext(progress_file)[0] + '.jsonl', 'a+', encoding='utf-8') as f:
                 line = json.dumps(data, ensure_ascii=False)

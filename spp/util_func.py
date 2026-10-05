@@ -298,8 +298,8 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
             print(clean_result)
             return clean_result
         except Exception as e:
-            # print(f"执行失败：{e}")
-            if ind > 100000:
+            print(f"evaluator_construction failed (attempt {ind + 1}/4): {type(e).__name__}: {e}")
+            if ind >= 3:
                 return -1
             ind += 1
             continue

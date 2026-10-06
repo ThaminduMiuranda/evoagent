@@ -12,6 +12,45 @@ Newest entries first. Add one entry per change, right after making it.
 
 ---
 
+## 2026-10-06 — Make the three behavioural fixes opt-in, default to upstream
+
+**Files:** `spp/llm_evoagent_codenames.py`, `spp/util_func.py`
+
+**Why:** The 2026-10-05 fixes (parse guard, and the as-yet-unapplied
+check-agent argument fix) change scoring/flow relative to upstream. Before
+drawing any A/B/C conclusions, the request was to be able to run the exact
+same instances under unmodified upstream behaviour vs. each fix in
+isolation, with every run self-describing which configuration produced it
+— rather than the fix being permanently on with no way to get upstream
+numbers back for comparison.
+
+**What changed:** three env-var toggles, all defaulting to upstream
+(unchanged) behaviour:
+- `PARSE_GUARD` (default `off`): off = upstream's original fallback
+  (`answer.split("Final Answer:")[-1]`, which uses the raw text when the
+  marker is missing). on = the 2026-10-05 fix (score 0, skip the guess
+  call, never pass raw text as the hint). Either way, `spy_marker_present`
+  / `guess_marker_present` (whether "Final Answer:" was actually present)
+  are now always recorded on the result record, so upstream-mode runs
+  still show how often the guard would have fired.
+- `CHECK_ARGS_FIX` (default `off`): off = upstream's swapped-argument bug
+  in the two `check_agent_prompt` calls, left exactly as-is. on = calls
+  `message_construction` with the correct argument order.
+- `SPY_FORMAT` (default `upstream`): the only implemented value is
+  `upstream` (the original, unchanged spymaster prompt); anything else
+  raises `ValueError` rather than silently doing nothing. Placeholder seam
+  for a future alternate prompt wording, not yet needed.
+- All three flags' current values are now logged on every row of the
+  per-call JSONL log (`util_func.py`), and `parse_guard`/`check_args_fix`/
+  `spy_format` are also stamped onto every per-instance result record in
+  `llm_evoagent_codenames.py`, so any run's config is recoverable from its
+  own output files without cross-referencing how it was launched.
+
+**Not yet run:** this commit only adds the toggles; no comparison run
+between upstream and fixed behaviour has been executed yet.
+
+---
+
 ## 2026-10-06 — Calibration run analysis (no code change)
 
 **What:** Ran the calibration command (direct prompting, 5 Codenames

@@ -290,6 +290,9 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
                     "thinking": thinking_text,
                     "done_reason": done_reason,
                     "content_empty": clean_result.strip() == "",
+                    "parse_guard": os.environ.get("PARSE_GUARD", "off").strip().lower(),
+                    "check_args_fix": os.environ.get("CHECK_ARGS_FIX", "off").strip().lower(),
+                    "spy_format": os.environ.get("SPY_FORMAT", "upstream").strip().lower(),
                 }
                 log_path = os.environ.get("LOG_PATH", "logs/calls.jsonl")
                 os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)

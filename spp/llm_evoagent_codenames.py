@@ -57,7 +57,7 @@ def build_spy_prompt(n, target_words, word_list):
     if spy_format != "upstream":
         raise ValueError(f"SPY_FORMAT={spy_format!r} is not implemented; only 'upstream' exists so far")
     return f'''Try to find a single word hint that can accurately represent and link the {n} given words: "{target_words}". The key is to select a hint that does not cause confusion with other words from the following word list: {word_list}.
-You need to give reasons first and then give the answer with the format: \"Final Answer: <a single word from the word list>\"
+You need to give reasons first and then give the answer with the format: \"Final Answer: <a single word from the word list>\" 
 Answer:
 '''
 

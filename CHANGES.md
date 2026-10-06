@@ -12,6 +12,45 @@ Newest entries first. Add one entry per change, right after making it.
 
 ---
 
+## 2026-10-06 — Byte-identical upstream prompt, scoring script, options logging, raise-not-sentinel
+
+**Files:** `spp/llm_evoagent_codenames.py`, `spp/check_build_spy_prompt.py` (new),
+`spp/score_codenames.py` (new), `spp/util_func.py`
+
+**Why:** Four follow-ups from reviewing the previous entry's toggles and the
+pilot run's output so far.
+
+**What changed:**
+- `build_spy_prompt()` (added 2026-10-06 for `SPY_FORMAT`) had silently
+  dropped a trailing space present in the real upstream f-string (after the
+  closing `\"` on the format-instruction line), confirmed by diffing against
+  `git show fc6d087:spp/llm_evoagent_codenames.py` byte-for-byte. Fixed, and
+  added `check_build_spy_prompt.py`, a standalone self-check that asserts
+  `build_spy_prompt()`'s output matches the upstream literal exactly; run it
+  after touching that function again.
+- Added `score_codenames.py`: given a result `.jsonl` (and optionally its
+  call-log `.jsonl`), prints pooled matched/target, spymaster/guesser
+  marker rates (`spy_marker_present`/`guess_marker_present`, reported as
+  "n/a" rather than 0% on runs from before those fields existed), the
+  hint-leak rate (share of instances whose `hint_word` contains a target
+  word), and the call-log truncation rate. Run against the Arm B smoke
+  test data as a check: reproduces the known numbers (23.1% pooled score,
+  100% hint-leak rate, 51.5% truncation).
+- `util_func.py`, `data_type == 'small'` branch: the `options` dict sent to
+  Ollama is now built as its own variable and logged verbatim on every call
+  record (`log_record["options"]`), instead of being reconstructable only
+  from separately-logged fields. Added optional passthrough for
+  `OLLAMA_REPEAT_PENALTY`/`OLLAMA_PRESENCE_PENALTY`/`OLLAMA_FREQUENCY_PENALTY`/
+  `OLLAMA_SEED` — only added to `options` if the corresponding env var is
+  set, so default-config runs' logged `options` dict is unchanged.
+- `evaluator_construction`'s exhausted-retries case now `raise`s the last
+  exception instead of `return -1`. Grepped `spp/*.py` for any code
+  checking a result against `-1` first — found none (the other `-1`
+  matches are unrelated: list/string indexing and a model-name literal),
+  so nothing depended on the sentinel.
+
+---
+
 ## 2026-10-06 — Make the three behavioural fixes opt-in, default to upstream
 
 **Files:** `spp/llm_evoagent_codenames.py`, `spp/util_func.py`
@@ -76,6 +115,11 @@ Before picking Arm A/B/C's real budget, worth checking whether the open
 prompt wording itself is contributing, rather than treating this as a pure
 token-budget problem.
 
+Context for comparing against the paper: `--method direct` is the paper's
+CoT (Chain-of-Thought)-style single-agent baseline prompt, not a separate
+thing EvoAgent invented — so Arm A/C's `direct` results are the fair
+single-agent comparison point the paper itself reports against.
+
 **Files touched:** none by me. `41dab7e` moved (did not modify)
 `spp/logs/calls_armB_smoke.jsonl` → `spp/logs/calls_armB_smoke/`,
 `spp/logs/gpu_log_armB_smoke.csv` → same folder, and added the calibration
@@ -110,7 +154,9 @@ with zero visible cause.
   and log `spy_parse_failed`/`guess_parse_failed` on the result record.
 - `util_func.py`: the exception handler in `evaluator_construction` now
   prints the exception and gives up after 4 attempts total, instead of
-  retrying silently up to 100,000 times.
+  retrying silently up to 100,000 times. (As of 2026-10-06, "gives up"
+  means re-raising the exception, not returning a `-1` sentinel — see
+  that date's entry.)
 
 **Known gap left open:** `spy_collaboration_func`/`guess_collaboration_func`
 (the `evoagent`-method collaboration loop) have a separate, confirmed bug —

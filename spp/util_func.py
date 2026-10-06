@@ -231,6 +231,24 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
                 max_tokens = int(os.environ.get("OLLAMA_MAX_TOKENS", "512"))
                 temperature = float(os.environ.get("OLLAMA_TEMPERATURE", "0"))
 
+                options = {
+                    "num_ctx": num_ctx,
+                    "num_gpu": num_gpu,
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                }
+                # Optional sampling-param passthrough: only set if the caller asked
+                # for a specific value, so default-config runs' options dict is
+                # unchanged from what earlier logs already recorded.
+                if "OLLAMA_REPEAT_PENALTY" in os.environ:
+                    options["repeat_penalty"] = float(os.environ["OLLAMA_REPEAT_PENALTY"])
+                if "OLLAMA_PRESENCE_PENALTY" in os.environ:
+                    options["presence_penalty"] = float(os.environ["OLLAMA_PRESENCE_PENALTY"])
+                if "OLLAMA_FREQUENCY_PENALTY" in os.environ:
+                    options["frequency_penalty"] = float(os.environ["OLLAMA_FREQUENCY_PENALTY"])
+                if "OLLAMA_SEED" in os.environ:
+                    options["seed"] = int(os.environ["OLLAMA_SEED"])
+
                 call_start = time.time()
                 resp = requests.post(
                     f"{ollama_base}/api/chat",
@@ -238,12 +256,7 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
                         "model": model_name,
                         "messages": messages,
                         "think": think,
-                        "options": {
-                            "num_ctx": num_ctx,
-                            "num_gpu": num_gpu,
-                            "temperature": temperature,
-                            "num_predict": max_tokens,
-                        },
+                        "options": options,
                         "stream": False,
                     },
                     timeout=600,
@@ -290,6 +303,7 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
                     "thinking": thinking_text,
                     "done_reason": done_reason,
                     "content_empty": clean_result.strip() == "",
+                    "options": options,
                     "parse_guard": os.environ.get("PARSE_GUARD", "off").strip().lower(),
                     "check_args_fix": os.environ.get("CHECK_ARGS_FIX", "off").strip().lower(),
                     "spy_format": os.environ.get("SPY_FORMAT", "upstream").strip().lower(),
@@ -303,7 +317,7 @@ def evaluator_construction(messages, model_name, prompt, data_type='azure'):
         except Exception as e:
             print(f"evaluator_construction failed (attempt {ind + 1}/4): {type(e).__name__}: {e}")
             if ind >= 3:
-                return -1
+                raise
             ind += 1
             continue
 
